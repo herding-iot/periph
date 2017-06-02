@@ -38,19 +38,20 @@ const (
 	regCmd           = 0x80 // 0b10000000
 	cmdAutoIncrement = 0x20 // 0b00100000
 
-	// Commands for reading the light levels.
-	cmdReadClear = regCmd | cmdAutoIncrement | 0x14
-	cmdReadRed   = regCmd | cmdAutoIncrement | 0x16
-	cmdReadGreen = regCmd | cmdAutoIncrement | 0x18
-	cmdReadBlue  = regCmd | cmdAutoIncrement | 0x1a
-
-	// Commands for
+	// Commands for configuration.
 	cmdEnable  = regCmd | 0
 	cmdATime   = regCmd | 1
 	cmdControl = regCmd | 0x0f
 	cmdChipID  = regCmd | 0x12
 	cmdStatus  = regCmd | 0x13
 
+	// Commands for reading the light values.
+	cmdReadClear = regCmd | cmdAutoIncrement | 0x14
+	cmdReadRed   = regCmd | cmdAutoIncrement | 0x16
+	cmdReadGreen = regCmd | cmdAutoIncrement | 0x18
+	cmdReadBlue  = regCmd | cmdAutoIncrement | 0x1a
+
+	// Flags for the enable command.
 	enableInterrupt = 1 << 4
 	enableWait      = 1 << 3
 	enableRGBC      = 1 << 1
@@ -133,7 +134,7 @@ func (d *Dev) Halt() error {
 
 type Light struct {
 	Int     uint16
-	R, G, B uint16
+	R, G, B float32
 }
 
 // Measure measures the light intensity and color.
@@ -143,14 +144,21 @@ func (d *Dev) Measure(l *Light) error {
 	if l.Int, err = d.dev.ReadUint16(cmdReadClear); err != nil {
 		return err
 	}
-	if l.R, err = d.dev.ReadUint16(cmdReadRed); err != nil {
+	var r, g, b uint16
+	r, err = d.dev.ReadUint16(cmdReadRed)
+	if err != nil {
 		return err
 	}
-	if l.G, err = d.dev.ReadUint16(cmdReadGreen); err != nil {
+	g, err = d.dev.ReadUint16(cmdReadGreen)
+	if err != nil {
 		return err
 	}
-	if l.B, err = d.dev.ReadUint16(cmdReadBlue); err != nil {
+	b, err = d.dev.ReadUint16(cmdReadBlue)
+	if err != nil {
 		return err
 	}
+	l.R = float32(r) / float32(l.Int)
+	l.G = float32(g) / float32(l.Int)
+	l.B = float32(b) / float32(l.Int)
 	return nil
 }
