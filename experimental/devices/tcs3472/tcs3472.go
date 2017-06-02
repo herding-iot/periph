@@ -5,10 +5,11 @@
 package tcs3472
 
 import (
+	"encoding/binary"
 	"fmt"
 
-	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/i2c"
+	"periph.io/x/periph/conn/mmr"
 )
 
 // FIXME: Expose public symbols as relevant. Do not export more than needed!
@@ -55,42 +56,41 @@ const (
 
 // Dev is a handle to a TCS34725 Color Sensor.
 type Dev struct {
-	c conn.Conn
+	dev mmr.Dev8
 }
 
 // New opens a handle that communicates over I²C with the TCS34725 Color Sensor.
 // The bus supports fast mode with a data rate of up to 400 kbit/s.
-func New(i i2c.Bus) (*Dev, error) {
+func New(b i2c.Bus) (*Dev, error) {
+	bus := &i2c.Dev{Bus: b, Addr: chipAddr}
 	d := &Dev{
-		c: &i2c.Dev{Bus: i, Addr: chipAddr},
+		dev: mmr.Dev8{
+			Conn:  bus,
+			Order: binary.BigEndian,
+		},
 	}
 
-	var id [1]byte
-	if err := d.c.Tx([]byte{cmdChipID}, id[:]); err != nil {
+	id, err := d.dev.ReadUint8(cmdChipID)
+	if err != nil {
 		return nil, err
 	}
-	if id[0] != chipID && id[0] != chipIDAlt {
+	if id != chipID && id != chipIDAlt {
 		return nil, fmt.Errorf("tcs3472: unexpected chip ID 0x%x", id)
 	}
 
-	// self.i2c_bus.write_byte_data(ADDR, REG_ENABLE, REG_ENABLE_RGBC|REG_ENABLE_POWER)
-	// self.set_integration_time_ms(511.2)
-
-	// FIXME: Simulate a setup dance.
-	// var b [2]byte
-	// if err := d.c.Tx([]byte(), b[:]); err != nil {
+	// if err := d.c.Tx([]byte{cmdEnable, enablePower | enableRGBC}, nil); err != nil {
 	// 	return nil, err
 	// }
-	// if b[0] != 'I' || b[1] != 'N' {
-	// 	return nil, errors.New("driverskeleton: unexpected reply")
-	// }
+
+	// self.i2c_bus.write_byte_data(ADDR, REG_ENABLE, REG_ENABLE_RGBC|REG_ENABLE_POWER)
+	// self.set_integration_time_ms(511.2)
 
 	return d, nil
 }
 
 // String implements the String method of the fmt.Stringer interface.
 func (d *Dev) String() string {
-	return fmt.Sprintf("TCS4372{%s}", d.c)
+	return fmt.Sprintf("TCS4372{%s}", d.dev.Conn)
 }
 
 // Halt implements the Halt method of the devices.Device interface.

@@ -92,7 +92,7 @@ func mainImpl() error {
 
 func main() {
 	if err := mainImpl(); err != nil {
-		fmt.Fprintf(os.Stderr, "bmp180: %s.\n", err)
+		fmt.Fprintf(os.Stderr, "tcs3472: %s.\n", err)
 		os.Exit(1)
 	}
 }
