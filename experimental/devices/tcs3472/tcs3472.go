@@ -6,7 +6,10 @@ package tcs3472
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
+
+	"time"
 
 	"periph.io/x/periph/conn/i2c"
 	"periph.io/x/periph/conn/mmr"
@@ -56,7 +59,8 @@ const (
 
 // Dev is a handle to a TCS34725 Color Sensor.
 type Dev struct {
-	dev mmr.Dev8
+	dev      mmr.Dev8
+	maxCount uint32
 }
 
 // New opens a handle that communicates over I²C with the TCS34725 Color Sensor.
@@ -78,14 +82,43 @@ func New(b i2c.Bus) (*Dev, error) {
 		return nil, fmt.Errorf("tcs3472: unexpected chip ID 0x%x", id)
 	}
 
-	// if err := d.c.Tx([]byte{cmdEnable, enablePower | enableRGBC}, nil); err != nil {
-	// 	return nil, err
-	// }
+	if err := d.dev.WriteUint8(cmdEnable, enablePower|enableRGBC); err != nil {
+		return nil, err
+	}
 
-	// self.i2c_bus.write_byte_data(ADDR, REG_ENABLE, REG_ENABLE_RGBC|REG_ENABLE_POWER)
-	// self.set_integration_time_ms(511.2)
+	if err := d.SetIntegrationTime(511 * time.Millisecond); err != nil {
+		return nil, err
+	}
 
 	return d, nil
+}
+
+// SetIntegrationTime sets the integration time of measurements. It can be
+// between 2.4 and 612 ms.
+func (d *Dev) SetIntegrationTime(dur time.Duration) error {
+	// The RGBC timing register controls the internal integration time of the
+	// RGBC clear and IR channel ADCs in 2.4-ms increments.
+	// Max RGBC Count = (256 − ATIME) × 1024 up to a maximum of 65535
+	if dur < 2400*time.Microsecond || dur > 612*time.Millisecond {
+		return errors.New("integration time must be between 2.4 and 612 ms")
+	}
+	atime := 255 - uint8(dur.Nanoseconds()/2400000)
+	d.maxCount = uint32(atime) * 1024
+	if d.maxCount > 65535 {
+		d.maxCount = 65535
+	}
+	if err := d.dev.WriteUint8(cmdATime, atime); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MaxCount returns the max value that can be counted for a channel for the
+// choosen integration time. Longer integration times give a larger count.
+// The count ranges from 1024 for a 2.4 ms integration time to 65535 for a
+// 612 ms integration time.
+func (d *Dev) MaxCount() uint32 {
+	return d.maxCount
 }
 
 // String implements the String method of the fmt.Stringer interface.
@@ -99,16 +132,25 @@ func (d *Dev) Halt() error {
 }
 
 type Light struct {
-	Int     uint8
-	R, G, B uint8
+	Int     uint16
+	R, G, B uint16
 }
 
 // Measure measures the light intensity and color.
+// FIXME: This gives the raw values.
 func (d *Dev) Measure(l *Light) error {
-	// var b [12]byte
-	// if err := d.c.Tx([]byte("what"), b[:]); err != nil {
-	// 	return err.Error()
-	// }
-	// return string(b[:])
+	var err error
+	if l.Int, err = d.dev.ReadUint16(cmdReadClear); err != nil {
+		return err
+	}
+	if l.R, err = d.dev.ReadUint16(cmdReadRed); err != nil {
+		return err
+	}
+	if l.G, err = d.dev.ReadUint16(cmdReadGreen); err != nil {
+		return err
+	}
+	if l.B, err = d.dev.ReadUint16(cmdReadBlue); err != nil {
+		return err
+	}
 	return nil
 }
