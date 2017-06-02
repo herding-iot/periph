@@ -42,7 +42,7 @@ func read(d *tcs3472.Dev, interval time.Duration) error {
 		if err := d.Measure(&light); err != nil {
 			return err
 		}
-		fmt.Printf("Int: %d, RGB: %d, %d, %d\n", light.Int, light.R, light.G, light.B)
+		fmt.Printf("Int: %d, RGB: %.3f, %.3f, %.3f\n", light.Int, light.R, light.G, light.B)
 		if t == nil {
 			break
 		}
