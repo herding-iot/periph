@@ -37,10 +37,6 @@ func read(d *tcs3472.Dev, interval time.Duration) error {
 		t = time.NewTicker(interval)
 	}
 
-	if valid, err := d.Valid(); !valid || err != nil {
-		return err
-	}
-
 	for {
 		var light tcs3472.Light
 		if err := d.Measure(&light); err != nil {
@@ -83,6 +79,14 @@ func mainImpl() error {
 
 	dev, err := tcs3472.New(bus)
 	if err != nil {
+		return err
+	}
+
+	if err := dev.SetGain(tcs3472.G4x); err != nil {
+		return err
+	}
+
+	if valid, err := dev.Valid(); !valid || err != nil {
 		return err
 	}
 

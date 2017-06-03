@@ -15,9 +15,27 @@ import (
 	"periph.io/x/periph/conn/mmr"
 )
 
-// FIXME: Expose public symbols as relevant. Do not export more than needed!
-// See https://periph.io/x/periph/tree/master/doc/drivers#requirements
-// for the expectations.
+// Light is a light measurement with intensity and color.
+type Light struct {
+	// The light intensity, up to MaxCount().
+	Int uint16
+	// The color values as a percentage.
+	R, G, B float32
+}
+
+// RawValues are the raw measurment values.
+type RawValues [4]uint16
+
+const (
+	// ClearVal is the index of the clear value in RawValues.
+	ClearVal = iota
+	// RedVal is the index of the red value in RawValues.
+	RedVal
+	// GreenVal is the index of the green value in RawValues.
+	GreenVal
+	// BlueVal is the index of the blue value in RawValues.
+	BlueVal
+)
 
 // Gain is the analog gain of the RGBC meassurement.
 type Gain uint8
@@ -39,11 +57,11 @@ const (
 	cmdAutoIncrement = 0x20 // 0b00100000
 
 	// Commands for configuration.
-	cmdEnable  = regCmd | 0
-	cmdATime   = regCmd | 1
-	cmdControl = regCmd | 0x0f
-	cmdChipID  = regCmd | 0x12
-	cmdStatus  = regCmd | 0x13
+	cmdEnable = regCmd | 0
+	cmdATime  = regCmd | 1
+	cmdGain   = regCmd | 0x0f
+	cmdChipID = regCmd | 0x12
+	cmdStatus = regCmd | 0x13
 
 	// Commands for reading the light values.
 	cmdReadClear = regCmd | cmdAutoIncrement | 0x14
@@ -104,9 +122,10 @@ func (d *Dev) String() string {
 	return fmt.Sprintf("TCS4372{%s}", d.dev.Conn)
 }
 
-// Halt implements the Halt method of the devices.Device interface.
+// Halt implements the Halt method of the devices.Device interface. It will
+// disable the power to the device.
 func (d *Dev) Halt() error {
-	return nil
+	return d.dev.WriteUint8(cmdEnable, 0)
 }
 
 // SetIntegrationTime sets the integration time of measurements. It can be
@@ -137,42 +156,40 @@ func (d *Dev) MaxCount() uint32 {
 	return d.maxCount
 }
 
+// SetGain sets the gain of the light measurment.
 func (d *Dev) SetGain(g Gain) error {
-	return nil
-}
-
-// Light is a light measurement with intensity and color.
-type Light struct {
-	// The light intensity, up to MaxCount().
-	Int uint16
-	// The color values as a percentage.
-	R, G, B float32
+	return d.dev.WriteUint8(cmdGain, uint8(g))
 }
 
 // Measure measures the light intensity and color.
 func (d *Dev) Measure(l *Light) error {
-	var err error
-	if l.Int, err = d.dev.ReadUint16(cmdReadClear); err != nil {
-		return err
-	}
-	var r, g, b uint16
-	r, err = d.dev.ReadUint16(cmdReadRed)
-	if err != nil {
-		return err
-	}
-	g, err = d.dev.ReadUint16(cmdReadGreen)
-	if err != nil {
-		return err
-	}
-	b, err = d.dev.ReadUint16(cmdReadBlue)
+	vals, err := d.MeasureRaw()
 	if err != nil {
 		return err
 	}
 	// Normalize the color values to the intensity.
-	l.R = float32(r) / float32(l.Int)
-	l.G = float32(g) / float32(l.Int)
-	l.B = float32(b) / float32(l.Int)
+	l.Int = vals[ClearVal]
+	l.R = float32(vals[RedVal]) / float32(l.Int)
+	l.G = float32(vals[GreenVal]) / float32(l.Int)
+	l.B = float32(vals[BlueVal]) / float32(l.Int)
 	return nil
+}
+
+// MeasureRaw measures the raw light intensity and color.
+func (d *Dev) MeasureRaw() (vals RawValues, err error) {
+	if vals[ClearVal], err = d.dev.ReadUint16(cmdReadClear); err != nil {
+		return
+	}
+	if vals[RedVal], err = d.dev.ReadUint16(cmdReadRed); err != nil {
+		return
+	}
+	if vals[GreenVal], err = d.dev.ReadUint16(cmdReadGreen); err != nil {
+		return
+	}
+	if vals[BlueVal], err = d.dev.ReadUint16(cmdReadBlue); err != nil {
+		return
+	}
+	return
 }
 
 // Valid indicates that the RGBC channels have completed an integration cycle.
