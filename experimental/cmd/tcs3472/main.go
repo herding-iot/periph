@@ -37,6 +37,10 @@ func read(d *tcs3472.Dev, interval time.Duration) error {
 		t = time.NewTicker(interval)
 	}
 
+	if valid, err := d.Valid(); !valid || err != nil {
+		return err
+	}
+
 	for {
 		var light tcs3472.Light
 		if err := d.Measure(&light); err != nil {

@@ -56,6 +56,10 @@ const (
 	enableWait      = 1 << 3
 	enableRGBC      = 1 << 1
 	enablePower     = 1
+
+	// Masks for the status response.
+	statusInterrupt = 1 << 4
+	statusValid     = 1
 )
 
 // Dev is a handle to a TCS34725 Color Sensor.
@@ -75,6 +79,7 @@ func New(b i2c.Bus) (*Dev, error) {
 		},
 	}
 
+	// Check the ID.
 	id, err := d.dev.ReadUint8(cmdChipID)
 	if err != nil {
 		return nil, err
@@ -83,15 +88,25 @@ func New(b i2c.Bus) (*Dev, error) {
 		return nil, fmt.Errorf("tcs3472: unexpected chip ID 0x%x", id)
 	}
 
+	// Enable the device.
 	if err := d.dev.WriteUint8(cmdEnable, enablePower|enableRGBC); err != nil {
 		return nil, err
 	}
-
 	if err := d.SetIntegrationTime(511 * time.Millisecond); err != nil {
 		return nil, err
 	}
 
 	return d, nil
+}
+
+// String implements the String method of the fmt.Stringer interface.
+func (d *Dev) String() string {
+	return fmt.Sprintf("TCS4372{%s}", d.dev.Conn)
+}
+
+// Halt implements the Halt method of the devices.Device interface.
+func (d *Dev) Halt() error {
+	return nil
 }
 
 // SetIntegrationTime sets the integration time of measurements. It can be
@@ -122,23 +137,19 @@ func (d *Dev) MaxCount() uint32 {
 	return d.maxCount
 }
 
-// String implements the String method of the fmt.Stringer interface.
-func (d *Dev) String() string {
-	return fmt.Sprintf("TCS4372{%s}", d.dev.Conn)
-}
-
-// Halt implements the Halt method of the devices.Device interface.
-func (d *Dev) Halt() error {
+func (d *Dev) SetGain(g Gain) error {
 	return nil
 }
 
+// Light is a light measurement with intensity and color.
 type Light struct {
-	Int     uint16
+	// The light intensity, up to MaxCount().
+	Int uint16
+	// The color values as a percentage.
 	R, G, B float32
 }
 
 // Measure measures the light intensity and color.
-// FIXME: This gives the raw values.
 func (d *Dev) Measure(l *Light) error {
 	var err error
 	if l.Int, err = d.dev.ReadUint16(cmdReadClear); err != nil {
@@ -157,8 +168,19 @@ func (d *Dev) Measure(l *Light) error {
 	if err != nil {
 		return err
 	}
+	// Normalize the color values to the intensity.
 	l.R = float32(r) / float32(l.Int)
 	l.G = float32(g) / float32(l.Int)
 	l.B = float32(b) / float32(l.Int)
 	return nil
+}
+
+// Valid indicates that the RGBC channels have completed an integration cycle.
+func (d *Dev) Valid() (bool, error) {
+	status, err := d.dev.ReadUint8(cmdStatus)
+	if err != nil {
+		return false, err
+	}
+
+	return status&statusValid > 0, nil
 }
