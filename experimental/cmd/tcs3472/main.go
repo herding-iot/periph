@@ -54,6 +54,10 @@ func read(d *tcs3472.Dev, interval time.Duration) error {
 
 func mainImpl() error {
 	i2cID := flag.String("i2c", "", "I²C bus to use")
+	gain1x := flag.Bool("g1", false, "set gain to 1x")
+	gain4x := flag.Bool("g4", false, "set gain to 4x")
+	gain16x := flag.Bool("g16", false, "set gain to 16x")
+	gain60x := flag.Bool("g60", false, "set gain to 60x")
 	interval := flag.Duration("i", 0, "read data continously with this interval")
 	verbose := flag.Bool("v", false, "verbose mode")
 	flag.Parse()
@@ -61,6 +65,17 @@ func mainImpl() error {
 		log.SetOutput(ioutil.Discard)
 	}
 	log.SetFlags(log.Lmicroseconds)
+
+	g := tcs3472.G1x
+	if *gain1x {
+		g = tcs3472.G1x
+	} else if *gain4x {
+		g = tcs3472.G4x
+	} else if *gain16x {
+		g = tcs3472.G16x
+	} else if *gain60x {
+		g = tcs3472.G60x
+	}
 
 	if _, err := host.Init(); err != nil {
 		return err
@@ -82,7 +97,7 @@ func mainImpl() error {
 		return err
 	}
 
-	if err := dev.SetGain(tcs3472.G4x); err != nil {
+	if err := dev.SetGain(g); err != nil {
 		return err
 	}
 
