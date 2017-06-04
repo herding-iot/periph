@@ -57,11 +57,12 @@ const (
 	cmdAutoIncrement = 0x20 // 0b00100000
 
 	// Commands for configuration.
-	cmdEnable = regCmd | 0
-	cmdATime  = regCmd | 1
-	cmdGain   = regCmd | 0x0f
-	cmdChipID = regCmd | 0x12
-	cmdStatus = regCmd | 0x13
+	cmdEnable          = regCmd | 0
+	cmdIntegrationTime = regCmd | 1
+	cmdWaitTime        = regCmd | 3
+	cmdGain            = regCmd | 0x0f
+	cmdChipID          = regCmd | 0x12
+	cmdStatus          = regCmd | 0x13
 
 	// Commands for reading the light values.
 	cmdReadClear = regCmd | cmdAutoIncrement | 0x14
@@ -70,14 +71,15 @@ const (
 	cmdReadBlue  = regCmd | cmdAutoIncrement | 0x1a
 
 	// Flags for the enable command.
-	enableInterrupt = 1 << 4
-	enableWait      = 1 << 3
-	enableRGBC      = 1 << 1
+	disableAll      = 0
 	enablePower     = 1
+	enableRGBC      = 1 << 1
+	enableWait      = 1 << 3
+	enableInterrupt = 1 << 4
 
 	// Masks for the status response.
-	statusInterrupt = 1 << 4
 	statusValid     = 1
+	statusInterrupt = 1 << 4
 )
 
 // Dev is a handle to a TCS34725 Color Sensor.
@@ -125,7 +127,7 @@ func (d *Dev) String() string {
 // Halt implements the Halt method of the devices.Device interface. It will
 // disable the power to the device.
 func (d *Dev) Halt() error {
-	return d.dev.WriteUint8(cmdEnable, 0)
+	return d.dev.WriteUint8(cmdEnable, disableAll)
 }
 
 // SetIntegrationTime sets the integration time of measurements. It can be
@@ -133,16 +135,16 @@ func (d *Dev) Halt() error {
 func (d *Dev) SetIntegrationTime(dur time.Duration) error {
 	// The RGBC timing register controls the internal integration time of the
 	// RGBC clear and IR channel ADCs in 2.4-ms increments.
-	// Max RGBC Count = (256 − ATIME) × 1024 up to a maximum of 65535
+	// Max RGBC Count = (256 − T) × 1024 up to a maximum of 65535
 	if dur < 2400*time.Microsecond || dur > 612*time.Millisecond {
 		return errors.New("integration time must be between 2.4 and 612 ms")
 	}
-	atime := 255 - uint8(dur.Nanoseconds()/2400000)
-	d.maxCount = uint32(atime) * 1024
+	t := 255 - uint8(dur.Nanoseconds()/2400000)
+	d.maxCount = uint32(t) * 1024
 	if d.maxCount > 65535 {
 		d.maxCount = 65535
 	}
-	if err := d.dev.WriteUint8(cmdATime, atime); err != nil {
+	if err := d.dev.WriteUint8(cmdIntegrationTime, t); err != nil {
 		return err
 	}
 	return nil
@@ -154,6 +156,29 @@ func (d *Dev) SetIntegrationTime(dur time.Duration) error {
 // 612 ms integration time.
 func (d *Dev) MaxCount() uint32 {
 	return d.maxCount
+}
+
+// SetWaitTime sets the wait time of measurements to lower power consumption.
+// It can be between 2.4 and 614 ms.
+func (d *Dev) SetWaitTime(dur time.Duration) error {
+	if dur < 2400*time.Microsecond || dur > 614*time.Millisecond {
+		return errors.New("integration time must be between 2.4 and 612 ms")
+	}
+	t := 255 - uint8(dur.Nanoseconds()/2400000)
+	if err := d.dev.WriteUint8(cmdWaitTime, t); err != nil {
+		return err
+	}
+	return nil
+}
+
+// EnableWait enables the wait feature to save power.
+func (d *Dev) EnableWait() error {
+	return d.dev.WriteUint8(cmdEnable, enablePower|enableRGBC|enableWait)
+}
+
+// DisableWait disables the wait feature.
+func (d *Dev) DisableWait() error {
+	return d.dev.WriteUint8(cmdEnable, enablePower|enableRGBC)
 }
 
 // SetGain sets the gain of the light measurment.

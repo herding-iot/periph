@@ -58,6 +58,9 @@ func mainImpl() error {
 	gain4x := flag.Bool("g4", false, "set gain to 4x")
 	gain16x := flag.Bool("g16", false, "set gain to 16x")
 	gain60x := flag.Bool("g60", false, "set gain to 60x")
+	integrationTime := flag.Duration("it", 511*time.Millisecond, "integration time of measurments, between 2.4 and 612 ms")
+	enableWait := flag.Bool("w", false, "enable wait mode using the wait time")
+	waitTime := flag.Duration("wt", 614*time.Millisecond, "wait time between measurments, between 2.4 and 614 ms")
 	interval := flag.Duration("i", 0, "read data continously with this interval")
 	verbose := flag.Bool("v", false, "verbose mode")
 	flag.Parse()
@@ -99,6 +102,19 @@ func mainImpl() error {
 
 	if err := dev.SetGain(g); err != nil {
 		return err
+	}
+
+	if err := dev.SetIntegrationTime(*integrationTime); err != nil {
+		return err
+	}
+
+	if *enableWait {
+		if err := dev.EnableWait(); err != nil {
+			return err
+		}
+		if err := dev.SetWaitTime(*waitTime); err != nil {
+			return err
+		}
 	}
 
 	if valid, err := dev.Valid(); !valid || err != nil {
